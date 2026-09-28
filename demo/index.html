@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perceptual Vision Eval Toolkit — Interactive Psychophysical Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="hero-header">
+      <div class="badge">Psychophysics & Computer Vision Framework</div>
+      <h1>Perceptual Vision Eval Toolkit</h1>
+      <p class="subtitle">Automated visual diagnostics for synthetic media, UI legibility, Gestalt edge continuity, and optical multi-stability.</p>
+    </header>
+
+    <main class="dashboard-grid">
+      <!-- Sidebar Controls -->
+      <section class="panel controls-panel">
+        <h2 class="panel-title">01. Test Pattern Preset</h2>
+        <div class="preset-buttons">
+          <button class="btn btn-preset active" data-preset="machBands">Mach Band Ramp</button>
+          <button class="btn btn-preset" data-preset="highContrast">UI & Text Legibility</button>
+          <button class="btn btn-preset" data-preset="gestaltGrid">Gestalt Edge Grid</button>
+          <button class="btn btn-preset" data-preset="multiStable">Multi-Stability Flip</button>
+        </div>
+
+        <h2 class="panel-title" style="margin-top: 1.5rem;">02. Psychophysical Parameters</h2>
+        <div class="control-group">
+          <label for="sigmaSlider">
+            Lateral Inhibition ($\sigma$): <span id="sigmaVal">1.8</span>
+          </label>
+          <input type="range" id="sigmaSlider" min="0.5" max="4.0" step="0.1" value="1.8">
+          <span class="field-hint">Center-surround receptive field kernel size</span>
+        </div>
+
+        <div class="control-group">
+          <label for="gestaltSlider">
+            Gestalt Threshold: <span id="gestaltVal">0.42</span>
+          </label>
+          <input type="range" id="gestaltSlider" min="0.1" max="0.9" step="0.01" value="0.42">
+          <span class="field-hint">Edge orientation grouping sensitivity</span>
+        </div>
+
+        <div class="control-group">
+          <label for="multiSlider">
+            Multi-Stability Sensitivity: <span id="multiVal">0.75</span>
+          </label>
+          <input type="range" id="multiSlider" min="0.1" max="1.0" step="0.05" value="0.75">
+          <span class="field-hint">Oscillatory depth flip ambiguity detection</span>
+        </div>
+
+        <button id="runAuditBtn" class="btn btn-primary">Run Perceptual Audit</button>
+      </section>
+
+      <!-- Viewports & Heatmaps -->
+      <section class="panel viewports-panel">
+        <h2 class="panel-title">03. Real-Time Visual Viewports & Diagnostics</h2>
+        <div class="canvas-grid">
+          <div class="canvas-card">
+            <h3>Input Viewport</h3>
+            <canvas id="viewport" width="320" height="240"></canvas>
+          </div>
+          <div class="canvas-card">
+            <h3>Lateral Inhibition (DoG Map)</h3>
+            <canvas id="inhibitionMap" width="320" height="240"></canvas>
+          </div>
+          <div class="canvas-card">
+            <h3>Gestalt Edge Map</h3>
+            <canvas id="edgeMap" width="320" height="240"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Diagnostic Results Report -->
+      <section class="panel report-panel">
+        <h2 class="panel-title">04. Perceptual Diagnostic Report</h2>
+        <div class="score-container">
+          <div class="score-circle">
+            <span id="scoreNum" class="score-value">--</span>
+            <span class="score-max">/ 100</span>
+          </div>
+          <div class="score-meta">
+            <div id="statusBadge" class="status-pill">Awaiting Audit</div>
+            <p id="summaryText" class="summary-text">Select a preset pattern or adjust parameters to run evaluation.</p>
+          </div>
+        </div>
+
+        <div class="metrics-table-wrapper">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>Psychophysical Metric</th>
+                <th>Measured Value</th>
+                <th>Target Threshold</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Luminance Contrast ($L_r$)</td>
+                <td id="mContrast">--</td>
+                <td>&ge; 4.5:1 (AA)</td>
+                <td id="sContrast">--</td>
+              </tr>
+              <tr>
+                <td>Lateral Inhibition Peak ($\mathbf{K}_{\text{DoG}}$)</td>
+                <td id="mInhibition">--</td>
+                <td>&le; 2.4</td>
+                <td id="sInhibition">--</td>
+              </tr>
+              <tr>
+                <td>Gestalt Edge Continuity ($C_g$)</td>
+                <td id="mGestalt">--</td>
+                <td>0.65 – 0.95</td>
+                <td id="sGestalt">--</td>
+              </tr>
+              <tr>
+                <td>Multi-Stability Index ($M_s$)</td>
+                <td id="mMulti">--</td>
+                <td>&le; 0.30</td>
+                <td id="sMulti">--</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
