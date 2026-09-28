@@ -1,0 +1,36 @@
+{
+  "name": "perceptual-vision-eval",
+  "version": "1.0.0",
+  "description": "Browser and Node.js psychophysical evaluation framework measuring luminance contrast, Gestalt edge continuity, lateral inhibition proxies, and visual multi-stability.",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "demo": "node demo/server.js"
+  },
+  "keywords": [
+    "psychophysics",
+    "visual-perception",
+    "contrast-ratio",
+    "wcag",
+    "gestalt",
+    "lateral-inhibition",
+    "mach-bands",
+    "computer-vision",
+    "canvas-api"
+  ],
+  "author": "Juan P. Giusepponi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/untitled-jpg/perceptual-vision-eval.git"
+  },
+  "bugs": {
+    "url": "https://github.com/untitled-jpg/perceptual-vision-eval/issues"
+  },
+  "homepage": "https://github.com/untitled-jpg/perceptual-vision-eval#readme"
+}
