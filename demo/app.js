@@ -359,6 +359,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentPreset = "machBands";
 
+  // Image Upload Handler
+  const imageUploader = document.getElementById("imageUploader");
+  function loadCustomImage(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
+        ctxViewport.clearRect(0, 0, viewport.width, viewport.height);
+        ctxViewport.drawImage(img, 0, 0, viewport.width, viewport.height);
+        runAudit();
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (imageUploader) {
+    imageUploader.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        loadCustomImage(e.target.files[0]);
+      }
+    });
+  }
+
+  // Drag and drop onto viewport canvas
+  viewport.addEventListener("dragover", (e) => e.preventDefault());
+  viewport.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      loadCustomImage(e.dataTransfer.files[0]);
+    }
+  });
+
   // Sync slider values
   if (sigmaSlider) {
     sigmaSlider.addEventListener("input", (e) => {
