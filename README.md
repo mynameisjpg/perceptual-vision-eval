@@ -11,6 +11,18 @@ Built on foundational psychophysics from **David Cycleback's *Art Perception*** 
 
 ---
 
+## How It Works (In Simple Words)
+
+Think of this toolkit as an **"eye doctor" for computer graphics and UI designs**. It takes an image or HTML canvas, analyzes how the human eye and brain will perceive it, and returns a visual health score out of 100.
+
+### 4 Visual Tests Performed:
+1. **Text & UI Readability (Contrast):** Checks if text or buttons stand out clearly from the background so users don't have to squint.
+2. **Eye Strain & Glare Protection (Lateral Inhibition):** Simulates human retina cells to flag harsh light-against-dark edges that cause glare, visual ghosting (Mach bands), or eye fatigue.
+3. **Shape & Border Flow (Gestalt Edge Continuity):** Checks if lines and borders align neatly into recognizable shapes and separate cleanly from the background.
+4. **Visual Illusion Detection (Multi-Stability):** Detects confusing areas where your brain might get tricked into seeing conflicting 3D depth shapes (like optical illusions).
+
+---
+
 ## 01. Evaluation Pipeline Architecture
 
 ```text
