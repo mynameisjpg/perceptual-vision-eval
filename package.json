@@ -27,10 +27,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/untitled-jpg/perceptual-vision-eval.git"
+    "url": "git+https://github.com/mynameisjpg/perceptual-vision-eval.git"
   },
   "bugs": {
-    "url": "https://github.com/untitled-jpg/perceptual-vision-eval/issues"
+    "url": "https://github.com/mynameisjpg/perceptual-vision-eval/issues"
   },
-  "homepage": "https://github.com/untitled-jpg/perceptual-vision-eval#readme"
+  "homepage": "https://github.com/mynameisjpg/perceptual-vision-eval#readme"
 }
