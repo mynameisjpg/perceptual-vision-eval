@@ -1,5 +1,7 @@
-// Perceptual Vision Eval Toolkit — Interactive Demo Controller
-// Self-contained browser evaluator engine supporting file:// protocol and local HTTP server
+// Perceptual Vision Eval Toolkit — Interactive Psychophysical Engine & UI Controller
+// Supports standalone file:// browser execution and local Node HTTP server
+
+// --- 01. Core Psychophysical Math & Image Processing Utilities ---
 
 function normalizeImageData(input) {
   if (!input) {
@@ -29,6 +31,7 @@ function toGrayscaleMatrix(imageData) {
     const r = data[i * 4] / 255;
     const g = data[i * 4 + 1] / 255;
     const b = data[i * 4 + 2] / 255;
+    // Linear sRGB conversion (ITU-R BT.709) for psychophysical luminance accuracy
     const rLin = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
     const gLin = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
     const bLin = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
@@ -214,9 +217,10 @@ function computeMultiStability(imageData, sensitivity = 0.75) {
   const gridY = 8;
   const blockW = Math.floor(width / gridX);
   const blockH = Math.floor(height / gridY);
+  const varianceMap = new Float32Array(width * height);
 
   if (blockW < 2 || blockH < 2) {
-    return { multiStabilityIndex: 0.1, hasDepthAmbiguity: false, phaseVariance: 0.05 };
+    return { multiStabilityIndex: 0.1, hasDepthAmbiguity: false, phaseVariance: 0.05, varianceMap };
   }
 
   const blockSymmetries = [];
@@ -236,8 +240,14 @@ function computeMultiStability(imageData, sensitivity = 0.75) {
           count++;
         }
       }
-      if (count > 0) {
-        blockSymmetries.push(horizontalSymmetry / count);
+      const symVal = count > 0 ? horizontalSymmetry / count : 0;
+      blockSymmetries.push(symVal);
+
+      // Write block symmetry value to 2D variance map for viewport display
+      for (let y = 0; y < blockH; y++) {
+        for (let x = 0; x < blockW; x++) {
+          varianceMap[(startY + y) * width + (startX + x)] = Math.abs(0.5 - symVal) * 2;
+        }
       }
     }
   }
@@ -257,7 +267,8 @@ function computeMultiStability(imageData, sensitivity = 0.75) {
   return {
     multiStabilityIndex,
     hasDepthAmbiguity,
-    phaseVariance: Math.round(phaseVariance * 1000) / 1000
+    phaseVariance: Math.round(phaseVariance * 1000) / 1000,
+    varianceMap
   };
 }
 
@@ -302,7 +313,8 @@ class PerceptualEvaluator {
       },
       maps: {
         lateralInhibition: lateralInhibition.responseMap,
-        gestaltEdges: gestalt.edgeMap
+        gestaltEdges: gestalt.edgeMap,
+        multiStability: multiStability.varianceMap
       }
     };
   }
@@ -321,7 +333,8 @@ class PerceptualEvaluator {
   }
 }
 
-// --- Interactive UI & DOM Logic ---
+// --- 02. Interactive UI, Event Listeners & Rendering Logic ---
+
 document.addEventListener("DOMContentLoaded", () => {
   const viewport = document.getElementById("viewport");
   if (!viewport) return;
@@ -333,7 +346,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const edgeMapCanvas = document.getElementById("edgeMap");
   const ctxEdge = edgeMapCanvas.getContext("2d");
 
-  // Sliders
+  const multiMapCanvas = document.getElementById("multiMap");
+  const ctxMulti = multiMapCanvas ? multiMapCanvas.getContext("2d") : null;
+
+  // Control Elements
   const sigmaSlider = document.getElementById("sigmaSlider");
   const gestaltSlider = document.getElementById("gestaltSlider");
   const multiSlider = document.getElementById("multiSlider");
@@ -343,11 +359,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const multiVal = document.getElementById("multiVal");
 
   const runAuditBtn = document.getElementById("runAuditBtn");
+  const resetBtn = document.getElementById("resetBtn");
   const scoreNum = document.getElementById("scoreNum");
+  const scoreCircle = document.getElementById("scoreCircle");
   const statusBadge = document.getElementById("statusBadge");
   const summaryText = document.getElementById("summaryText");
+  const resolutionBadge = document.getElementById("resolutionBadge");
 
-  // Table elements
+  // Metric Card & Table Elements
   const mContrast = document.getElementById("mContrast");
   const sContrast = document.getElementById("sContrast");
   const mInhibition = document.getElementById("mInhibition");
@@ -357,10 +376,70 @@ document.addEventListener("DOMContentLoaded", () => {
   const mMulti = document.getElementById("mMulti");
   const sMulti = document.getElementById("sMulti");
 
+  const cardValContrast = document.getElementById("cardValContrast");
+  const cardBadgeContrast = document.getElementById("cardBadgeContrast");
+  const cardValInhibition = document.getElementById("cardValInhibition");
+  const cardBadgeInhibition = document.getElementById("cardBadgeInhibition");
+  const cardValGestalt = document.getElementById("cardValGestalt");
+  const cardBadgeGestalt = document.getElementById("cardBadgeGestalt");
+  const cardValMulti = document.getElementById("cardValMulti");
+  const cardBadgeMulti = document.getElementById("cardBadgeMulti");
+
+  const recommendationsList = document.getElementById("recommendationsList");
+
   let currentPreset = "machBands";
 
-  // Image Upload Handler
+  // Sync Slider Display Values
+  if (sigmaSlider && sigmaVal) {
+    sigmaSlider.addEventListener("input", (e) => {
+      sigmaVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+  if (gestaltSlider && gestaltVal) {
+    gestaltSlider.addEventListener("input", (e) => {
+      gestaltVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+  if (multiSlider && multiVal) {
+    multiSlider.addEventListener("input", (e) => {
+      multiVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+
+  // Preset Buttons
+  document.querySelectorAll(".btn-preset").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentPreset = btn.dataset.preset;
+      drawPresetPattern(currentPreset);
+      runAudit();
+    });
+  });
+
+  // Action Buttons
+  if (runAuditBtn) runAuditBtn.addEventListener("click", runAudit);
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      if (sigmaSlider) { sigmaSlider.value = 1.8; sigmaVal.textContent = "1.8"; }
+      if (gestaltSlider) { gestaltSlider.value = 0.42; gestaltVal.textContent = "0.42"; }
+      if (multiSlider) { multiSlider.value = 0.75; multiVal.textContent = "0.75"; }
+      document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
+      const firstPreset = document.querySelector('.btn-preset[data-preset="machBands"]');
+      if (firstPreset) firstPreset.classList.add("active");
+      currentPreset = "machBands";
+      drawPresetPattern(currentPreset);
+      runAudit();
+    });
+  }
+
+  // Image File Upload & Drag-and-Drop
   const imageUploader = document.getElementById("imageUploader");
+  const dropzone = document.getElementById("dropzone");
+
   function loadCustomImage(file) {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -368,8 +447,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const img = new Image();
       img.onload = () => {
         document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
-        ctxViewport.clearRect(0, 0, viewport.width, viewport.height);
-        ctxViewport.drawImage(img, 0, 0, viewport.width, viewport.height);
+        
+        // Preserve image aspect ratio inside viewport
+        const w = 320;
+        const h = 240;
+        viewport.width = w;
+        viewport.height = h;
+
+        ctxViewport.fillStyle = "#000000";
+        ctxViewport.fillRect(0, 0, w, h);
+
+        const hRatio = w / img.width;
+        const vRatio = h / img.height;
+        const ratio = Math.min(hRatio, vRatio);
+        const centerShiftX = (w - img.width * ratio) / 2;
+        const centerShiftY = (h - img.height * ratio) / 2;
+
+        ctxViewport.drawImage(img, 0, 0, img.width, img.height, centerShiftX, centerShiftY, img.width * ratio, img.height * ratio);
+        if (resolutionBadge) resolutionBadge.textContent = `${img.width} × ${img.height} px (Scaled)`;
         runAudit();
       };
       img.src = event.target.result;
@@ -385,60 +480,37 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Drag and drop onto viewport canvas
-  viewport.addEventListener("dragover", (e) => e.preventDefault());
-  viewport.addEventListener("drop", (e) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      loadCustomImage(e.dataTransfer.files[0]);
-    }
-  });
-
-  // Sync slider values
-  if (sigmaSlider) {
-    sigmaSlider.addEventListener("input", (e) => {
-      if (sigmaVal) sigmaVal.textContent = e.target.value;
-      runAudit();
+  if (dropzone) {
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
     });
-  }
-  if (gestaltSlider) {
-    gestaltSlider.addEventListener("input", (e) => {
-      if (gestaltVal) gestaltVal.textContent = e.target.value;
-      runAudit();
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+      });
     });
-  }
-  if (multiSlider) {
-    multiSlider.addEventListener("input", (e) => {
-      if (multiVal) multiVal.textContent = e.target.value;
-      runAudit();
-    });
-  }
-
-  // Preset switcher
-  document.querySelectorAll(".btn-preset").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentPreset = btn.dataset.preset;
-      drawPresetPattern(currentPreset);
-      runAudit();
-    });
-  });
-
-  if (runAuditBtn) {
-    runAuditBtn.addEventListener("click", () => {
-      runAudit();
+    dropzone.addEventListener("drop", (e) => {
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        loadCustomImage(e.dataTransfer.files[0]);
+      }
     });
   }
 
   function drawPresetPattern(preset) {
-    const w = viewport.width;
-    const h = viewport.height;
+    const w = 320;
+    const h = 240;
+    viewport.width = w;
+    viewport.height = h;
+
     ctxViewport.fillStyle = "#000000";
     ctxViewport.fillRect(0, 0, w, h);
+    if (resolutionBadge) resolutionBadge.textContent = `${w} × ${h} px`;
 
     if (preset === "machBands") {
-      // Luminance Step Ramp creating Mach bands
       const steps = 6;
       const stepW = w / steps;
       for (let i = 0; i < steps; i++) {
@@ -447,25 +519,20 @@ document.addEventListener("DOMContentLoaded", () => {
         ctxViewport.fillRect(i * stepW, 0, stepW, h);
       }
     } else if (preset === "highContrast") {
-      // Dark mode UI surface with text and button
       ctxViewport.fillStyle = "#0f172a";
       ctxViewport.fillRect(0, 0, w, h);
 
-      // Card background
       ctxViewport.fillStyle = "#1e293b";
       ctxViewport.fillRect(20, 20, w - 40, h - 40);
 
-      // High contrast header
       ctxViewport.fillStyle = "#f8fafc";
       ctxViewport.font = "bold 16px sans-serif";
       ctxViewport.fillText("PERCEPTUAL EVAL", 40, 55);
 
-      // Subtitle text
       ctxViewport.fillStyle = "#94a3b8";
       ctxViewport.font = "12px sans-serif";
       ctxViewport.fillText("Contrast ratio legibility audit", 40, 75);
 
-      // Button
       ctxViewport.fillStyle = "#38bdf8";
       ctxViewport.fillRect(40, 100, 120, 36);
 
@@ -473,19 +540,16 @@ document.addEventListener("DOMContentLoaded", () => {
       ctxViewport.font = "bold 12px sans-serif";
       ctxViewport.fillText("ACTION BTN", 60, 122);
     } else if (preset === "gestaltGrid") {
-      // Continuous oriented edges vs noisy background
       ctxViewport.fillStyle = "#111827";
       ctxViewport.fillRect(0, 0, w, h);
 
       ctxViewport.strokeStyle = "#10b981";
       ctxViewport.lineWidth = 3;
 
-      // Draw coherent curved stroke
       ctxViewport.beginPath();
       ctxViewport.arc(w / 2, h / 2, 70, 0, Math.PI * 1.5);
       ctxViewport.stroke();
 
-      // Random edge noise background
       ctxViewport.strokeStyle = "#374151";
       ctxViewport.lineWidth = 1;
       for (let i = 0; i < 40; i++) {
@@ -497,7 +561,6 @@ document.addEventListener("DOMContentLoaded", () => {
         ctxViewport.stroke();
       }
     } else if (preset === "multiStable") {
-      // Necker Cube / Ambiguous 3D frame pattern
       ctxViewport.fillStyle = "#050811";
       ctxViewport.fillRect(0, 0, w, h);
 
@@ -509,29 +572,27 @@ document.addEventListener("DOMContentLoaded", () => {
       const cy = h / 2 - 35;
       const offset = 25;
 
-      // Front square
       ctxViewport.strokeRect(cx, cy, size, size);
-      // Back square
       ctxViewport.strokeRect(cx + offset, cy - offset, size, size);
 
-      // Connecting lines
       ctxViewport.beginPath();
       ctxViewport.moveTo(cx, cy);
       ctxViewport.lineTo(cx + offset, cy - offset);
-
       ctxViewport.moveTo(cx + size, cy);
       ctxViewport.lineTo(cx + size + offset, cy - offset);
-
       ctxViewport.moveTo(cx, cy + size);
       ctxViewport.lineTo(cx + offset, cy + size - offset);
-
       ctxViewport.moveTo(cx + size, cy + size);
       ctxViewport.lineTo(cx + size + offset, cy + size - offset);
       ctxViewport.stroke();
     }
   }
 
-  function renderHeatmap(canvasCtx, floatArray, width, height, colorMode = "inhibition") {
+  function renderHeatmap(canvas, floatArray, width, height, colorMode = "inhibition") {
+    if (!canvas) return;
+    canvas.width = width;
+    canvas.height = height;
+    const canvasCtx = canvas.getContext("2d");
     const imgData = canvasCtx.createImageData(width, height);
     const data = imgData.data;
 
@@ -546,13 +607,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const idx = i * 4;
 
       if (colorMode === "inhibition") {
-        data[idx] = Math.floor(norm * 255); // R
-        data[idx + 1] = Math.floor((1 - norm) * 220); // G
-        data[idx + 2] = Math.floor((1 - norm) * 255); // B
-      } else {
+        data[idx] = Math.floor(norm * 255);        // Red
+        data[idx + 1] = Math.floor((1 - norm) * 220); // Green
+        data[idx + 2] = Math.floor((1 - norm) * 255); // Blue
+      } else if (colorMode === "gestalt") {
         data[idx] = 0;
         data[idx + 1] = Math.floor(norm * 255);
-        data[idx + 2] = Math.floor(norm * 200);
+        data[idx + 2] = Math.floor(norm * 180);
+      } else if (colorMode === "multi") {
+        data[idx] = Math.floor(norm * 245);
+        data[idx + 1] = Math.floor(norm * 158);
+        data[idx + 2] = 11;
       }
       data[idx + 3] = 255;
     }
@@ -570,9 +635,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const report = evaluator.analyze(viewport);
 
-    // Update Score & Summary
+    // Update Score Circle & Overall Badge
     if (scoreNum) scoreNum.textContent = report.score;
     if (summaryText) summaryText.textContent = report.diagnostics.summary;
+
+    if (scoreCircle) {
+      if (report.score >= 80) {
+        scoreCircle.style.borderColor = "var(--accent-green)";
+        scoreCircle.style.background = "radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%)";
+      } else if (report.score >= 50) {
+        scoreCircle.style.borderColor = "var(--accent-yellow)";
+        scoreCircle.style.background = "radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, transparent 70%)";
+      } else {
+        scoreCircle.style.borderColor = "var(--accent-red)";
+        scoreCircle.style.background = "radial-gradient(circle, rgba(239, 68, 68, 0.2) 0%, transparent 70%)";
+      }
+    }
 
     if (statusBadge) {
       if (report.score >= 80) {
@@ -587,38 +665,100 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Update Table
+    // Update 4 Metric Cards
+    if (cardValContrast) cardValContrast.textContent = `${report.metrics.contrastRatio}:1`;
+    if (cardBadgeContrast) {
+      cardBadgeContrast.textContent = report.diagnostics.wcagPassAA ? "WCAG AA" : "POOR";
+      cardBadgeContrast.style.background = report.diagnostics.wcagPassAA ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)";
+      cardBadgeContrast.style.color = report.diagnostics.wcagPassAA ? "var(--accent-green)" : "var(--accent-red)";
+    }
+
+    if (cardValInhibition) cardValInhibition.textContent = report.metrics.lateralInhibitionPeak;
+    if (cardBadgeInhibition) {
+      cardBadgeInhibition.textContent = report.diagnostics.machBandingWarning ? "GLARE" : "STABLE";
+      cardBadgeInhibition.style.background = report.diagnostics.machBandingWarning ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.2)";
+      cardBadgeInhibition.style.color = report.diagnostics.machBandingWarning ? "var(--accent-yellow)" : "var(--accent-green)";
+    }
+
+    if (cardValGestalt) cardValGestalt.textContent = report.metrics.gestaltContinuity;
+    if (cardBadgeGestalt) {
+      cardBadgeGestalt.textContent = report.diagnostics.gestaltSeparationWarning ? "WEAK" : "OPTIMAL";
+      cardBadgeGestalt.style.background = report.diagnostics.gestaltSeparationWarning ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.2)";
+      cardBadgeGestalt.style.color = report.diagnostics.gestaltSeparationWarning ? "var(--accent-yellow)" : "var(--accent-green)";
+    }
+
+    if (cardValMulti) cardValMulti.textContent = report.metrics.multiStabilityIndex;
+    if (cardBadgeMulti) {
+      cardBadgeMulti.textContent = report.diagnostics.hasDepthAmbiguity ? "AMBIGUOUS" : "STABLE";
+      cardBadgeMulti.style.background = report.diagnostics.hasDepthAmbiguity ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.2)";
+      cardBadgeMulti.style.color = report.diagnostics.hasDepthAmbiguity ? "var(--accent-yellow)" : "var(--accent-green)";
+    }
+
+    // Update Metrics Table
     if (mContrast) mContrast.textContent = `${report.metrics.contrastRatio}:1`;
     if (sContrast) {
-      sContrast.innerHTML = report.diagnostics.wcagPassAA 
+      sContrast.innerHTML = report.diagnostics.wcagPassAAA
+        ? `<span class="pass-text">PASS (AAA)</span>`
+        : report.diagnostics.wcagPassAA 
         ? `<span class="pass-text">PASS (AA)</span>` 
-        : `<span class="fail-text">FAIL</span>`;
+        : `<span class="fail-text">FAIL (< 4.5:1)</span>`;
     }
 
     if (mInhibition) mInhibition.textContent = report.metrics.lateralInhibitionPeak;
     if (sInhibition) {
       sInhibition.innerHTML = report.diagnostics.machBandingWarning 
-        ? `<span class="warn-text">GLARE RISK</span>` 
-        : `<span class="pass-text">STABLE</span>`;
+        ? `<span class="warn-text">GLARE RISK (> 2.4)</span>` 
+        : `<span class="pass-text">STABLE (&le; 2.4)</span>`;
     }
 
     if (mGestalt) mGestalt.textContent = report.metrics.gestaltContinuity;
     if (sGestalt) {
       sGestalt.innerHTML = report.diagnostics.gestaltSeparationWarning 
-        ? `<span class="warn-text">LOW SEPARATION</span>` 
-        : `<span class="pass-text">OPTIMAL</span>`;
+        ? `<span class="warn-text">LOW SEPARATION (< 0.65)</span>` 
+        : `<span class="pass-text">OPTIMAL (&ge; 0.65)</span>`;
     }
 
     if (mMulti) mMulti.textContent = report.metrics.multiStabilityIndex;
     if (sMulti) {
       sMulti.innerHTML = report.diagnostics.hasDepthAmbiguity 
-        ? `<span class="warn-text">3D AMBIGUITY</span>` 
-        : `<span class="pass-text">CLEAR</span>`;
+        ? `<span class="warn-text">3D AMBIGUITY (> 0.30)</span>` 
+        : `<span class="pass-text">STABLE (&le; 0.30)</span>`;
     }
 
     // Render Heatmaps
-    renderHeatmap(ctxInhibition, report.maps.lateralInhibition, viewport.width, viewport.height, "inhibition");
-    renderHeatmap(ctxEdge, report.maps.gestaltEdges, viewport.width, viewport.height, "gestalt");
+    renderHeatmap(inhibitionMap, report.maps.lateralInhibition, viewport.width, viewport.height, "inhibition");
+    renderHeatmap(edgeMapCanvas, report.maps.gestaltEdges, viewport.width, viewport.height, "gestalt");
+    if (multiMapCanvas && report.maps.multiStability) {
+      renderHeatmap(multiMapCanvas, report.maps.multiStability, viewport.width, viewport.height, "multi");
+    }
+
+    // Generate Actionable Recommendations
+    if (recommendationsList) {
+      const recs = [];
+      if (!report.diagnostics.wcagPassAA) {
+        recs.push(`<strong>Luminance Contrast (${report.metrics.contrastRatio}:1) is below WCAG AA (4.5:1):</strong> Increase text brightness or darken surface background for legibility.`);
+      } else if (report.diagnostics.wcagPassAAA) {
+        recs.push(`<strong>Excellent Text Contrast (${report.metrics.contrastRatio}:1):</strong> Meets strict WCAG AAA standards.`);
+      }
+
+      if (report.diagnostics.machBandingWarning) {
+        recs.push(`<strong>Mach Band Glare Risk Detected (DoG Peak: ${report.metrics.lateralInhibitionPeak}):</strong> Sharp step transitions simulate retinal ganglion cell over-excitation. Smooth step edges with subtle dithering or blur.`);
+      }
+
+      if (report.diagnostics.gestaltSeparationWarning) {
+        recs.push(`<strong>Weak Gestalt Edge Continuity (${report.metrics.gestaltContinuity}):</strong> Edge orientation vectors lack structural coherence. Sharpen boundary outlines or increase figure-ground contrast.`);
+      }
+
+      if (report.diagnostics.hasDepthAmbiguity) {
+        recs.push(`<strong>Multi-Stability 3D Depth Ambiguity (${report.metrics.multiStabilityIndex}):</strong> Spatial phase symmetry creates conflicting visual depth flip illusions (Necker effect). Break horizontal symmetry or add directional shadows.`);
+      }
+
+      if (recs.length === 0) {
+        recs.push("<strong>Optimal Optical Performance:</strong> All 4 visual perception metrics pass technical benchmarks with high perceptual fidelity.");
+      }
+
+      recommendationsList.innerHTML = recs.map(r => `<li>${r}</li>`).join("");
+    }
   }
 
   // Initial Draw & Audit

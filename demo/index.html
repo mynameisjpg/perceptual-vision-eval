@@ -3,99 +3,220 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Perceptual Vision Eval Toolkit — Interactive Psychophysical Demo</title>
+  <title>Perceptual Vision Eval Toolkit — Interactive Psychophysical Diagnostics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app-container">
+    <!-- Top Hero Header -->
     <header class="hero-header">
-      <div class="badge">Psychophysics & Computer Vision Framework</div>
+      <div class="header-meta">
+        <div class="badge"><span class="pulse-dot"></span> Psychophysics & Computer Vision Framework</div>
+        <div class="version-tag">v1.0.0</div>
+      </div>
       <h1>Perceptual Vision Eval Toolkit</h1>
-      <p class="subtitle">Automated visual diagnostics for synthetic media, UI legibility, Gestalt edge continuity, and optical multi-stability.</p>
+      <p class="subtitle">Automated visual diagnostics for synthetic media, UI legibility, Gestalt edge continuity, lateral inhibition proxies, and optical multi-stability.</p>
     </header>
 
     <main class="dashboard-grid">
       <!-- Sidebar Controls -->
       <section class="panel controls-panel">
-        <h2 class="panel-title">01. Test Pattern Preset</h2>
-        <div class="preset-buttons">
-          <button class="btn btn-preset active" data-preset="machBands">Mach Band Ramp</button>
-          <button class="btn btn-preset" data-preset="highContrast">UI & Text Legibility</button>
-          <button class="btn btn-preset" data-preset="gestaltGrid">Gestalt Edge Grid</button>
-          <button class="btn btn-preset" data-preset="multiStable">Multi-Stability Flip</button>
+        <div class="section-header">
+          <h2 class="panel-title">01. Test Pattern & Image Source</h2>
+        </div>
+        
+        <div class="preset-grid">
+          <button class="btn btn-preset active" data-preset="machBands">
+            <span class="preset-icon">🔳</span>
+            <span class="preset-label">Mach Band Ramp</span>
+          </button>
+          <button class="btn btn-preset" data-preset="highContrast">
+            <span class="preset-icon">🎨</span>
+            <span class="preset-label">UI Legibility Grid</span>
+          </button>
+          <button class="btn btn-preset" data-preset="gestaltGrid">
+            <span class="preset-icon">🟩</span>
+            <span class="preset-label">Gestalt Edge Grid</span>
+          </button>
+          <button class="btn btn-preset" data-preset="multiStable">
+            <span class="preset-icon">🧊</span>
+            <span class="preset-label">Multi-Stable 3D</span>
+          </button>
         </div>
 
-        <div class="upload-container" style="margin-top: 1rem;">
-          <label for="imageUploader" class="btn btn-upload" style="display: block; text-align: center; background: rgba(0, 238, 245, 0.08); border: 1px dashed var(--accent-cyan); color: var(--accent-cyan); cursor: pointer;">
-            📷 Upload Custom Image
-          </label>
+        <div class="upload-dropzone" id="dropzone">
           <input type="file" id="imageUploader" accept="image/*" style="display: none;">
+          <label for="imageUploader" class="dropzone-content">
+            <span class="upload-icon">📷</span>
+            <span class="upload-title">Upload Custom Image</span>
+            <span class="upload-sub">Click to select or drag & drop image file</span>
+          </label>
         </div>
 
-        <h2 class="panel-title" style="margin-top: 1.5rem;">02. Psychophysical Parameters</h2>
+        <div class="section-header" style="margin-top: 1.75rem;">
+          <h2 class="panel-title">02. Psychophysical Sensitivity Parameters</h2>
+        </div>
+
         <div class="control-group">
           <label for="sigmaSlider">
-            Lateral Inhibition ($\sigma$): <span id="sigmaVal">1.8</span>
+            <span>Lateral Inhibition (σ)</span>
+            <span id="sigmaVal" class="param-val">1.8</span>
           </label>
           <input type="range" id="sigmaSlider" min="0.5" max="4.0" step="0.1" value="1.8">
-          <span class="field-hint">Center-surround receptive field kernel size</span>
+          <span class="field-hint">Center-surround receptive field kernel radius</span>
         </div>
 
         <div class="control-group">
           <label for="gestaltSlider">
-            Gestalt Threshold: <span id="gestaltVal">0.42</span>
+            <span>Gestalt Threshold (C<sub>g</sub>)</span>
+            <span id="gestaltVal" class="param-val">0.42</span>
           </label>
-          <input type="range" id="gestaltSlider" min="0.1" max="0.9" step="0.01" value="0.42">
-          <span class="field-hint">Edge orientation grouping sensitivity</span>
+          <input type="range" id="gestaltSlider" min="0.10" max="0.90" step="0.01" value="0.42">
+          <span class="field-hint">Sobel orientation vector alignment sensitivity</span>
         </div>
 
         <div class="control-group">
           <label for="multiSlider">
-            Multi-Stability Sensitivity: <span id="multiVal">0.75</span>
+            <span>Multi-Stability Sensitivity (M<sub>s</sub>)</span>
+            <span id="multiVal" class="param-val">0.75</span>
           </label>
-          <input type="range" id="multiSlider" min="0.1" max="1.0" step="0.05" value="0.75">
-          <span class="field-hint">Oscillatory depth flip ambiguity detection</span>
+          <input type="range" id="multiSlider" min="0.10" max="1.00" step="0.05" value="0.75">
+          <span class="field-hint">Spatial symmetry phase variance sensitivity</span>
         </div>
 
-        <button id="runAuditBtn" class="btn btn-primary">Run Perceptual Audit</button>
+        <div class="button-row">
+          <button id="runAuditBtn" class="btn btn-primary">Run Perceptual Audit</button>
+          <button id="resetBtn" class="btn btn-secondary">Reset</button>
+        </div>
       </section>
 
-      <!-- Viewports & Heatmaps -->
+      <!-- Viewports & Diagnostic Heatmaps (2x2 Grid) -->
       <section class="panel viewports-panel">
-        <h2 class="panel-title">03. Real-Time Visual Viewports & Diagnostics</h2>
+        <div class="section-header">
+          <h2 class="panel-title">03. Real-Time Diagnostic Viewports & Optical Maps</h2>
+          <span id="resolutionBadge" class="resolution-badge">320 × 240 px</span>
+        </div>
+        
         <div class="canvas-grid">
+          <!-- Viewport 1: Input Image -->
           <div class="canvas-card">
-            <h3>Input Viewport</h3>
-            <canvas id="viewport" width="320" height="240"></canvas>
+            <div class="card-header">
+              <h3>Input Viewport</h3>
+              <span class="card-tag">Source</span>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="viewport" width="320" height="240"></canvas>
+            </div>
+            <div class="card-caption">Source pattern or uploaded image canvas</div>
           </div>
+
+          <!-- Viewport 2: Lateral Inhibition -->
           <div class="canvas-card">
-            <h3>Lateral Inhibition (DoG Map)</h3>
-            <canvas id="inhibitionMap" width="320" height="240"></canvas>
+            <div class="card-header">
+              <h3>Lateral Inhibition (DoG Map)</h3>
+              <span class="card-tag tag-dog">Retinal</span>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="inhibitionMap" width="320" height="240"></canvas>
+            </div>
+            <div class="map-legend">
+              <span class="legend-color legend-cyan"></span> Surround Inhibition
+              <span class="legend-color legend-red"></span> Glare / Mach Peak
+            </div>
           </div>
+
+          <!-- Viewport 3: Gestalt Edge Map -->
           <div class="canvas-card">
-            <h3>Gestalt Edge Map</h3>
-            <canvas id="edgeMap" width="320" height="240"></canvas>
+            <div class="card-header">
+              <h3>Gestalt Edge Map (C<sub>g</sub>)</h3>
+              <span class="card-tag tag-gestalt">Vector</span>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="edgeMap" width="320" height="240"></canvas>
+            </div>
+            <div class="map-legend">
+              <span class="legend-color legend-emerald"></span> Orientation Vector Alignment
+            </div>
+          </div>
+
+          <!-- Viewport 4: Multi-Stability Map -->
+          <div class="canvas-card">
+            <div class="card-header">
+              <h3>Multi-Stability Map (M<sub>s</sub>)</h3>
+              <span class="card-tag tag-multi">Depth</span>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="multiMap" width="320" height="240"></canvas>
+            </div>
+            <div class="map-legend">
+              <span class="legend-color legend-gold"></span> Block Phase Symmetry Variance
+            </div>
           </div>
         </div>
       </section>
 
       <!-- Diagnostic Results Report -->
       <section class="panel report-panel">
-        <h2 class="panel-title">04. Perceptual Diagnostic Report</h2>
+        <div class="section-header">
+          <h2 class="panel-title">04. Perceptual Diagnostic Report & Scoring</h2>
+        </div>
+
         <div class="score-container">
-          <div class="score-circle">
-            <span id="scoreNum" class="score-value">--</span>
-            <span class="score-max">/ 100</span>
+          <div class="score-circle-wrapper">
+            <div class="score-circle" id="scoreCircle">
+              <span id="scoreNum" class="score-value">--</span>
+              <span class="score-max">/ 100</span>
+            </div>
           </div>
           <div class="score-meta">
             <div id="statusBadge" class="status-pill">Awaiting Audit</div>
-            <p id="summaryText" class="summary-text">Select a preset pattern or adjust parameters to run evaluation.</p>
+            <p id="summaryText" class="summary-text">Select a preset pattern or upload an image to run evaluation.</p>
           </div>
         </div>
 
+        <!-- 4 Metric Cards Grid -->
+        <div class="metric-cards-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Luminance Contrast (L<sub>r</sub>)</span>
+              <span id="cardBadgeContrast" class="card-status-badge">--</span>
+            </div>
+            <div id="cardValContrast" class="metric-big-num">--:1</div>
+            <div class="metric-subtext">WCAG 2.2 Relative Luminance</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Lateral Inhibition (K<sub>DoG</sub>)</span>
+              <span id="cardBadgeInhibition" class="card-status-badge">--</span>
+            </div>
+            <div id="cardValInhibition" class="metric-big-num">--</div>
+            <div class="metric-subtext">Difference of Gaussians Peak</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Gestalt Continuity (C<sub>g</sub>)</span>
+              <span id="cardBadgeGestalt" class="card-status-badge">--</span>
+            </div>
+            <div id="cardValGestalt" class="metric-big-num">--</div>
+            <div class="metric-subtext">Sobel Vector Coherence</div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Multi-Stability Index (M<sub>s</sub>)</span>
+              <span id="cardBadgeMulti" class="card-status-badge">--</span>
+            </div>
+            <div id="cardValMulti" class="metric-big-num">--</div>
+            <div class="metric-subtext">Depth Ambiguity Variance</div>
+          </div>
+        </div>
+
+        <!-- Metric Table -->
         <div class="metrics-table-wrapper">
           <table class="metrics-table">
             <thead>
@@ -103,36 +224,44 @@
                 <th>Psychophysical Metric</th>
                 <th>Measured Value</th>
                 <th>Target Threshold</th>
-                <th>Status</th>
+                <th>Evaluation Result</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>Luminance Contrast ($L_r$)</td>
-                <td id="mContrast">--</td>
-                <td>&ge; 4.5:1 (AA)</td>
+                <td>Luminance Contrast (L<sub>r</sub>)</td>
+                <td id="mContrast" class="font-mono">--</td>
+                <td>&ge; 4.5:1 (AA) / &ge; 7:1 (AAA)</td>
                 <td id="sContrast">--</td>
               </tr>
               <tr>
-                <td>Lateral Inhibition Peak ($\mathbf{K}_{\text{DoG}}$)</td>
-                <td id="mInhibition">--</td>
-                <td>&le; 2.4</td>
+                <td>Lateral Inhibition Peak (K<sub>DoG</sub>)</td>
+                <td id="mInhibition" class="font-mono">--</td>
+                <td>&le; 2.4 (Mach Banding Safe)</td>
                 <td id="sInhibition">--</td>
               </tr>
               <tr>
-                <td>Gestalt Edge Continuity ($C_g$)</td>
-                <td id="mGestalt">--</td>
-                <td>0.65 – 0.95</td>
+                <td>Gestalt Edge Continuity (C<sub>g</sub>)</td>
+                <td id="mGestalt" class="font-mono">--</td>
+                <td>0.65 – 0.95 (Coherent Edges)</td>
                 <td id="sGestalt">--</td>
               </tr>
               <tr>
-                <td>Multi-Stability Index ($M_s$)</td>
-                <td id="mMulti">--</td>
-                <td>&le; 0.30</td>
+                <td>Multi-Stability Index (M<sub>s</sub>)</td>
+                <td id="mMulti" class="font-mono">--</td>
+                <td>&le; 0.30 (Stable 3D Perception)</td>
                 <td id="sMulti">--</td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Actionable Recommendations Panel -->
+        <div class="recommendations-container" id="recommendationsPanel">
+          <h3 class="recommendations-title">💡 Actionable Psychophysical Recommendations</h3>
+          <ul id="recommendationsList" class="recommendations-list">
+            <li>Select a pattern or upload an image to view custom optical recommendations.</li>
+          </ul>
         </div>
       </section>
     </main>
