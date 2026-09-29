@@ -7,7 +7,7 @@
 
 The **Perceptual Vision Eval Toolkit** is an open-source browser and Node.js evaluation framework measuring luminance contrast, Gestalt edge continuity, lateral inhibition proxies, and visual multi-stability in AI outputs and synthetic media graphics.
 
-Built on foundational psychophysics from **David Cycleback's *Art Perception*** and **Rudolf Arnheim's visual psychology**, this toolkit provides automated perceptual diagnostics for generated graphics, dark mode surfaces, and dynamic web UI components.
+Built on foundational psychophysics from **David Cycleback's _Art Perception_** and **Rudolf Arnheim's visual psychology**, this toolkit provides automated perceptual diagnostics for generated graphics, dark mode surfaces, and dynamic web UI components.
 
 ---
 
@@ -16,6 +16,7 @@ Built on foundational psychophysics from **David Cycleback's *Art Perception*** 
 Think of this toolkit as an **"eye doctor" for computer graphics and UI designs**. It takes an image or HTML canvas, analyzes how the human eye and brain will perceive it, and returns a visual health score out of 100.
 
 ### 4 Visual Tests Performed:
+
 1. **Text & UI Readability (Contrast):** Checks if text or buttons stand out clearly from the background so users don't have to squint.
 2. **Eye Strain & Glare Protection (Lateral Inhibition):** Simulates human retina cells to flag harsh light-against-dark edges that cause glare, visual ghosting (Mach bands), or eye fatigue.
 3. **Shape & Border Flow (Gestalt Edge Continuity):** Checks if lines and borders align neatly into recognizable shapes and separate cleanly from the background.
@@ -53,7 +54,7 @@ Install the package via `npm` or clone the repository directly for local Node.js
 
 ```bash
 # Clone repository
-git clone https://github.com/untitled-jpg/perceptual-vision-eval.git
+git clone https://github.com/mynameisjpg/perceptual-vision-eval.git
 
 # Navigate to project root
 cd perceptual-vision-eval
@@ -79,7 +80,7 @@ import {
   computeLuminanceContrast,
   computeLateralInhibition,
   computeGestaltContinuity,
-  computeMultiStability
+  computeMultiStability,
 } from "perceptual-vision-eval";
 
 // Select target canvas element or image buffer object ({ data, width, height })
@@ -89,10 +90,10 @@ const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
 // Initialize evaluator with Cycleback psychophysical parameters
 const evaluator = new PerceptualEvaluator({
-  luminanceFormula: "WCAG21",          // 'WCAG21' | 'RelativeLuminance'
-  lateralInhibitionSigma: 1.8,         // Center-surround receptive field kernel size
-  gestaltThreshold: 0.42,              // Edge grouping sensitivity threshold
-  multiStabilitySensitivity: 0.75      // Oscillatory depth detection sensitivity
+  luminanceFormula: "WCAG21", // 'WCAG21' | 'RelativeLuminance'
+  lateralInhibitionSigma: 1.8, // Center-surround receptive field kernel size
+  gestaltThreshold: 0.42, // Edge grouping sensitivity threshold
+  multiStabilitySensitivity: 0.75, // Oscillatory depth detection sensitivity
 });
 
 // Run automated perceptual audit
@@ -109,12 +110,12 @@ console.log(`Summary: ${report.diagnostics.summary}`);
 
 ## 05. Technical Specifications & Benchmark Ratios
 
-| Metric Parameter | Formula / Method | Target Threshold | Perceptual Diagnostic |
-| :--- | :--- | :--- | :--- |
-| **Luminance Contrast ($L_r$)** | $\frac{L_1 + 0.05}{L_2 + 0.05}$ | $\ge 4.5:1$ (AA), $\ge 7:1$ (AAA) | Text & UI legibility against dark slate backgrounds |
-| **Lateral Inhibition ($\mathbf{K}_{\text{DoG}}$)** | Difference of Gaussians: $G_{\sigma_1} - G_{\sigma_2}$ | Peak edge ratio $\le 2.4$ | Prevents Mach band glare and visual fatigue |
-| **Gestalt Continuity ($C_g$)** | Orientation vector histogram coherence | $C_g \in [0.65, 0.95]$ | Ensures clear figure-ground separation |
-| **Multi-Stability Index ($M_s$)** | Spatial frequency phase inversion variance | $M_s \le 0.30$ | Flags ambiguous 3D visual flips in synthetic graphics |
+| Metric Parameter                                   | Formula / Method                                       | Target Threshold                  | Perceptual Diagnostic                                 |
+| :------------------------------------------------- | :----------------------------------------------------- | :-------------------------------- | :---------------------------------------------------- |
+| **Luminance Contrast ($L_r$)**                     | $\frac{L_1 + 0.05}{L_2 + 0.05}$                        | $\ge 4.5:1$ (AA), $\ge 7:1$ (AAA) | Text & UI legibility against dark slate backgrounds   |
+| **Lateral Inhibition ($\mathbf{K}_{\text{DoG}}$)** | Difference of Gaussians: $G_{\sigma_1} - G_{\sigma_2}$ | Peak edge ratio $\le 2.4$         | Prevents Mach band glare and visual fatigue           |
+| **Gestalt Continuity ($C_g$)**                     | Orientation vector histogram coherence                 | $C_g \in [0.65, 0.95]$            | Ensures clear figure-ground separation                |
+| **Multi-Stability Index ($M_s$)**                  | Spatial frequency phase inversion variance             | $M_s \le 0.30$                    | Flags ambiguous 3D visual flips in synthetic graphics |
 
 ---
 
