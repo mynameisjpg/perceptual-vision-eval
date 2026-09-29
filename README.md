@@ -48,61 +48,45 @@ EVALUATION PIPELINE ARCHITECTURE:
 
 ---
 
-## 03. Quickstart & Installation
+## 03. How to Test Any Image
 
-Install the package via `npm` or clone the repository directly for local Node.js / browser usage:
+### Option 1: Interactive Browser Demo (No Installation Required)
 
-```bash
-# Clone repository
-git clone https://github.com/mynameisjpg/perceptual-vision-eval.git
-
-# Navigate to project root
-cd perceptual-vision-eval
-
-# Run built-in test suite
-npm test
-
-# Launch interactive HTML5 Canvas demo
-npm run demo
-```
+1. **Open the Demo**: Double-click [`demo/index.html`](demo/index.html) in your file manager to launch it in any web browser (or run `npm run demo` and open `http://localhost:3000`).
+2. **Upload or Drag & Drop**:
+   - Click **📷 Upload Custom Image** in the left sidebar to select an image from your computer.
+   - Or **drag and drop** any `.png`, `.jpg`, or `.webp` file directly onto the **Input Viewport** canvas.
+3. **Inspect Diagnostics**:
+   - **Perceptual Score**: Composite visual quality score (`0 – 100`).
+   - **Luminance Contrast**: WCAG 2.2 AA/AAA legibility status.
+   - **Lateral Inhibition DoG Heatmap**: Cyan/red heatmap highlighting high-contrast glare boundaries & Mach banding.
+   - **Gestalt Edge Map**: Green edge alignment and figure-ground separation map.
+   - **Multi-Stability Index**: Detects 3D depth flip ambiguity.
 
 ---
 
-## 04. API Reference & Usage
+## 04. Programmatic API Usage
 
-The toolkit exposes both a high-level `PerceptualEvaluator` class and standalone psychophysical metric utilities.
-
-### ESM Import
+Install the package via `npm` or import modules directly:
 
 ```javascript
-import {
-  PerceptualEvaluator,
-  computeLuminanceContrast,
-  computeLateralInhibition,
-  computeGestaltContinuity,
-  computeMultiStability,
-} from "perceptual-vision-eval";
+import { PerceptualEvaluator } from "perceptual-vision-eval";
 
-// Select target canvas element or image buffer object ({ data, width, height })
-const canvas = document.getElementById("viewport");
-const ctx = canvas.getContext("2d");
-const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-// Initialize evaluator with Cycleback psychophysical parameters
+// 1. Initialize evaluator with sensitivity parameters
 const evaluator = new PerceptualEvaluator({
-  luminanceFormula: "WCAG21", // 'WCAG21' | 'RelativeLuminance'
-  lateralInhibitionSigma: 1.8, // Center-surround receptive field kernel size
-  gestaltThreshold: 0.42, // Edge grouping sensitivity threshold
-  multiStabilitySensitivity: 0.75, // Oscillatory depth detection sensitivity
+  luminanceFormula: "WCAG21",      // 'WCAG21' | 'RelativeLuminance'
+  lateralInhibitionSigma: 1.8,     // Center-surround receptive field kernel size
+  gestaltThreshold: 0.42,          // Edge grouping sensitivity
+  multiStabilitySensitivity: 0.75, // Depth ambiguity sensitivity
 });
 
-// Run automated perceptual audit
-const report = evaluator.analyze(imageData);
+// 2. Pass HTMLCanvasElement, CanvasRenderingContext2D, ImageData, or { data, width, height }
+const canvas = document.getElementById("viewport");
+const report = evaluator.analyze(canvas);
 
+// 3. Read automated diagnostic report
 console.log(`Perceptual Score: ${report.score} / 100`);
 console.log(`Contrast Ratio: ${report.metrics.contrastRatio}:1`);
-console.log(`Gestalt Continuity: ${report.metrics.gestaltContinuity}`);
-console.log(`Multi-Stability Warning: ${report.diagnostics.hasDepthAmbiguity}`);
 console.log(`Summary: ${report.diagnostics.summary}`);
 ```
 
@@ -119,15 +103,19 @@ console.log(`Summary: ${report.diagnostics.summary}`);
 
 ---
 
-## 06. Interactive HTML5 Canvas Demo
-
-To run the interactive browser demo locally, start the demo server:
+## 06. Developer Setup & Testing
 
 ```bash
+# Clone repository
+git clone https://github.com/mynameisjpg/perceptual-vision-eval.git
+cd perceptual-vision-eval
+
+# Run built-in test suite
+npm test
+
+# Launch local server
 npm run demo
 ```
-
-Then open `http://localhost:3000` in your web browser to test preset synthetic patterns (Mach bands, UI text legibility, Gestalt grids, multi-stable figures) and view live diagnostic heatmaps.
 
 ---
 
