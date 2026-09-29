@@ -1,251 +1,592 @@
-import { PerceptualEvaluator } from "../src/index.js";
+// Perceptual Vision Eval Toolkit — Interactive Demo Controller
+// Self-contained browser evaluator engine supporting file:// protocol and local HTTP server
 
-const viewport = document.getElementById("viewport");
-const ctxViewport = viewport.getContext("2d");
+function normalizeImageData(input) {
+  if (!input) {
+    throw new Error("Invalid image input provided to perceptual evaluator.");
+  }
+  if (typeof HTMLCanvasElement !== "undefined" && input instanceof HTMLCanvasElement) {
+    const ctx = input.getContext("2d");
+    return ctx.getImageData(0, 0, input.width, input.height);
+  }
+  if (typeof CanvasRenderingContext2D !== "undefined" && input instanceof CanvasRenderingContext2D) {
+    return input.getImageData(0, 0, input.canvas.width, input.canvas.height);
+  }
+  if (input.data && typeof input.width === "number" && typeof input.height === "number") {
+    return {
+      data: input.data,
+      width: Math.floor(input.width),
+      height: Math.floor(input.height)
+    };
+  }
+  throw new Error("Unsupported image input format.");
+}
 
-const inhibitionMap = document.getElementById("inhibitionMap");
-const ctxInhibition = inhibitionMap.getContext("2d");
+function toGrayscaleMatrix(imageData) {
+  const { data, width, height } = imageData;
+  const grayscale = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const r = data[i * 4] / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+    const rLin = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+    const gLin = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+    const bLin = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+    grayscale[i] = 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
+  }
+  return grayscale;
+}
 
-const edgeMapCanvas = document.getElementById("edgeMap");
-const ctxEdge = edgeMapCanvas.getContext("2d");
+function computeLuminanceContrast(imageData, formula = "WCAG21") {
+  const grayscale = toGrayscaleMatrix(imageData);
+  const totalPixels = grayscale.length;
+  if (totalPixels === 0) {
+    return { contrastRatio: 1, minLuminance: 0, maxLuminance: 0, meanLuminance: 0, passAA: false, passAAA: false };
+  }
+  let sumL = 0.0;
+  const samples = new Float32Array(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const l = grayscale[i];
+    samples[i] = l;
+    sumL += l;
+  }
+  samples.sort();
+  const p5Index = Math.floor(totalPixels * 0.05);
+  const p95Index = Math.floor(totalPixels * 0.95);
+  const L2 = samples[p5Index];
+  const L1 = samples[p95Index];
+  const meanLuminance = sumL / totalPixels;
+  const contrastRatio = (L1 + 0.05) / (L2 + 0.05);
+  const roundedRatio = Math.round(contrastRatio * 100) / 100;
+  return {
+    contrastRatio: roundedRatio,
+    minLuminance: Math.round(L2 * 1000) / 1000,
+    maxLuminance: Math.round(L1 * 1000) / 1000,
+    meanLuminance: Math.round(meanLuminance * 1000) / 1000,
+    passAA: roundedRatio >= 4.5,
+    passAAA: roundedRatio >= 7.0
+  };
+}
 
-// Sliders
-const sigmaSlider = document.getElementById("sigmaSlider");
-const gestaltSlider = document.getElementById("gestaltSlider");
-const multiSlider = document.getElementById("multiSlider");
+function create1DGaussianKernel(sigma) {
+  const radius = Math.ceil(sigma * 3);
+  const size = radius * 2 + 1;
+  const kernel = new Float32Array(size);
+  let sum = 0;
+  for (let i = -radius; i <= radius; i++) {
+    const val = Math.exp(-(i * i) / (2 * sigma * sigma));
+    kernel[i + radius] = val;
+    sum += val;
+  }
+  for (let i = 0; i < size; i++) {
+    kernel[i] /= sum;
+  }
+  return kernel;
+}
 
-const sigmaVal = document.getElementById("sigmaVal");
-const gestaltVal = document.getElementById("gestaltVal");
-const multiVal = document.getElementById("multiVal");
-
-const runAuditBtn = document.getElementById("runAuditBtn");
-const scoreNum = document.getElementById("scoreNum");
-const statusBadge = document.getElementById("statusBadge");
-const summaryText = document.getElementById("summaryText");
-
-// Table elements
-const mContrast = document.getElementById("mContrast");
-const sContrast = document.getElementById("sContrast");
-const mInhibition = document.getElementById("mInhibition");
-const sInhibition = document.getElementById("sInhibition");
-const mGestalt = document.getElementById("mGestalt");
-const sGestalt = document.getElementById("sGestalt");
-const mMulti = document.getElementById("mMulti");
-const sMulti = document.getElementById("sMulti");
-
-let currentPreset = "machBands";
-
-// Sync slider values
-sigmaSlider.addEventListener("input", (e) => {
-  sigmaVal.textContent = e.target.value;
-  runAudit();
-});
-gestaltSlider.addEventListener("input", (e) => {
-  gestaltVal.textContent = e.target.value;
-  runAudit();
-});
-multiSlider.addEventListener("input", (e) => {
-  multiVal.textContent = e.target.value;
-  runAudit();
-});
-
-// Preset switcher
-document.querySelectorAll(".btn-preset").forEach((btn) => {
-  btn.addEventListener("click", (e) => {
-    document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentPreset = btn.dataset.preset;
-    drawPresetPattern(currentPreset);
-    runAudit();
-  });
-});
-
-runAuditBtn.addEventListener("click", () => {
-  runAudit();
-});
-
-function drawPresetPattern(preset) {
-  const w = viewport.width;
-  const h = viewport.height;
-  ctxViewport.fillStyle = "#000000";
-  ctxViewport.fillRect(0, 0, w, h);
-
-  if (preset === "machBands") {
-    // Luminance Step Ramp creating Mach bands
-    const steps = 6;
-    const stepW = w / steps;
-    for (let i = 0; i < steps; i++) {
-      const luminance = Math.floor((i / (steps - 1)) * 255);
-      ctxViewport.fillStyle = `rgb(${luminance}, ${luminance}, ${luminance})`;
-      ctxViewport.fillRect(i * stepW, 0, stepW, h);
+function gaussianBlur2D(input, width, height, sigma) {
+  const kernel = create1DGaussianKernel(sigma);
+  const radius = (kernel.length - 1) / 2;
+  const temp = new Float32Array(width * height);
+  const output = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const px = Math.min(width - 1, Math.max(0, x + k));
+        sum += input[y * width + px] * kernel[k + radius];
+      }
+      temp[y * width + x] = sum;
     }
-  } else if (preset === "highContrast") {
-    // Dark mode UI surface with text and button
-    ctxViewport.fillStyle = "#0f172a";
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const py = Math.min(height - 1, Math.max(0, y + k));
+        sum += temp[py * width + x] * kernel[k + radius];
+      }
+      output[y * width + x] = sum;
+    }
+  }
+  return output;
+}
+
+function computeLateralInhibition(imageData, sigma = 1.8) {
+  const { width, height } = imageData;
+  const grayscale = toGrayscaleMatrix(imageData);
+  const sigmaCenter = Math.max(0.5, sigma * 0.5);
+  const sigmaSurround = sigma * 1.5;
+  const gCenter = gaussianBlur2D(grayscale, width, height, sigmaCenter);
+  const gSurround = gaussianBlur2D(grayscale, width, height, sigmaSurround);
+  const responseMap = new Float32Array(width * height);
+  let maxOvershoot = 0.0;
+  for (let i = 0; i < width * height; i++) {
+    const dog = gCenter[i] - gSurround[i];
+    responseMap[i] = dog;
+    const absDog = Math.abs(dog);
+    if (absDog > maxOvershoot) {
+      maxOvershoot = absDog;
+    }
+  }
+  const peakRatio = Math.round((maxOvershoot * 10) * 100) / 100;
+  const machBandWarning = peakRatio > 2.4;
+  return {
+    peakRatio,
+    maxOvershoot: Math.round(maxOvershoot * 1000) / 1000,
+    machBandWarning,
+    responseMap
+  };
+}
+
+function computeGestaltContinuity(imageData, threshold = 0.42) {
+  const { width, height } = imageData;
+  const grayscale = toGrayscaleMatrix(imageData);
+  const edgeMap = new Float32Array(width * height);
+  const orientations = new Float32Array(width * height);
+  let edgePixelCount = 0;
+  let totalCoherenceSum = 0;
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = y * width + x;
+      const p00 = grayscale[(y - 1) * width + (x - 1)];
+      const p01 = grayscale[(y - 1) * width + x];
+      const p02 = grayscale[(y - 1) * width + (x + 1)];
+      const p10 = grayscale[y * width + (x - 1)];
+      const p12 = grayscale[y * width + (x + 1)];
+      const p20 = grayscale[(y + 1) * width + (x - 1)];
+      const p21 = grayscale[(y + 1) * width + x];
+      const p22 = grayscale[(y + 1) * width + (x + 1)];
+
+      const gx = (p02 + 2 * p12 + p22) - (p00 + 2 * p10 + p20);
+      const gy = (p20 + 2 * p21 + p22) - (p00 + 2 * p01 + p02);
+      const magnitude = Math.sqrt(gx * gx + gy * gy);
+      edgeMap[idx] = magnitude;
+      orientations[idx] = Math.atan2(gy, gx);
+
+      if (magnitude > threshold * 0.5) {
+        edgePixelCount++;
+      }
+    }
+  }
+
+  let validNeighbors = 0;
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 2; x < width - 2; x++) {
+      const idx = y * width + x;
+      if (edgeMap[idx] < threshold * 0.3) continue;
+      const theta1 = orientations[idx];
+      const neighbors = [
+        orientations[(y - 1) * width + x],
+        orientations[(y + 1) * width + x],
+        orientations[y * width + (x - 1)],
+        orientations[y * width + (x + 1)]
+      ];
+      for (const theta2 of neighbors) {
+        const delta = Math.abs(theta1 - theta2);
+        const alignment = Math.cos(2 * delta);
+        totalCoherenceSum += (alignment + 1) / 2;
+        validNeighbors++;
+      }
+    }
+  }
+
+  const edgeDensity = edgePixelCount / (width * height);
+  const coherenceScore = validNeighbors > 0 ? totalCoherenceSum / validNeighbors : 0.5;
+  const rawContinuity = 0.4 * Math.min(1.0, edgeDensity * 12) + 0.6 * coherenceScore;
+  const gestaltContinuity = Math.round(rawContinuity * 100) / 100;
+  const separationWarning = gestaltContinuity < 0.65;
+
+  return {
+    gestaltContinuity,
+    edgeDensity: Math.round(edgeDensity * 1000) / 1000,
+    coherenceScore: Math.round(coherenceScore * 100) / 100,
+    separationWarning,
+    edgeMap
+  };
+}
+
+function computeMultiStability(imageData, sensitivity = 0.75) {
+  const { width, height } = imageData;
+  const grayscale = toGrayscaleMatrix(imageData);
+  const gridX = 8;
+  const gridY = 8;
+  const blockW = Math.floor(width / gridX);
+  const blockH = Math.floor(height / gridY);
+
+  if (blockW < 2 || blockH < 2) {
+    return { multiStabilityIndex: 0.1, hasDepthAmbiguity: false, phaseVariance: 0.05 };
+  }
+
+  const blockSymmetries = [];
+  for (let gy = 0; gy < gridY; gy++) {
+    for (let gx = 0; gx < gridX; gx++) {
+      let horizontalSymmetry = 0;
+      let count = 0;
+      const startX = gx * blockW;
+      const startY = gy * blockH;
+
+      for (let y = 0; y < blockH; y++) {
+        for (let x = 0; x < Math.floor(blockW / 2); x++) {
+          const leftPixel = grayscale[(startY + y) * width + (startX + x)];
+          const rightPixel = grayscale[(startY + y) * width + (startX + blockW - 1 - x)];
+          const diff = Math.abs(leftPixel - rightPixel);
+          horizontalSymmetry += 1.0 - diff;
+          count++;
+        }
+      }
+      if (count > 0) {
+        blockSymmetries.push(horizontalSymmetry / count);
+      }
+    }
+  }
+
+  let sum = 0;
+  for (const s of blockSymmetries) sum += s;
+  const mean = sum / blockSymmetries.length;
+  let varianceSum = 0;
+  for (const s of blockSymmetries) {
+    varianceSum += (s - mean) * (s - mean);
+  }
+  const phaseVariance = blockSymmetries.length > 0 ? varianceSum / blockSymmetries.length : 0;
+  const rawIndex = Math.min(1.0, Math.sqrt(phaseVariance) * (1.5 + sensitivity));
+  const multiStabilityIndex = Math.round(rawIndex * 100) / 100;
+  const hasDepthAmbiguity = multiStabilityIndex > 0.30;
+
+  return {
+    multiStabilityIndex,
+    hasDepthAmbiguity,
+    phaseVariance: Math.round(phaseVariance * 1000) / 1000
+  };
+}
+
+class PerceptualEvaluator {
+  constructor(options = {}) {
+    this.luminanceFormula = options.luminanceFormula || "WCAG21";
+    this.lateralInhibitionSigma = options.lateralInhibitionSigma ?? 1.8;
+    this.gestaltThreshold = options.gestaltThreshold ?? 0.42;
+    this.multiStabilitySensitivity = options.multiStabilitySensitivity ?? 0.75;
+  }
+
+  analyze(input) {
+    const imageData = normalizeImageData(input);
+    const contrast = computeLuminanceContrast(imageData, this.luminanceFormula);
+    const lateralInhibition = computeLateralInhibition(imageData, this.lateralInhibitionSigma);
+    const gestalt = computeGestaltContinuity(imageData, this.gestaltThreshold);
+    const multiStability = computeMultiStability(imageData, this.multiStabilitySensitivity);
+
+    const contrastScore = Math.min(40, (contrast.contrastRatio / 7) * 40);
+    const gestaltScore = Math.min(30, (gestalt.gestaltContinuity / 0.85) * 30);
+    const lateralScore = lateralInhibition.machBandWarning ? 5 : 15;
+    const multiStabilityScore = multiStability.hasDepthAmbiguity ? 5 : 15;
+    const totalScore = Math.round(Math.min(100, Math.max(0, contrastScore + gestaltScore + lateralScore + multiStabilityScore)));
+
+    return {
+      score: totalScore,
+      metrics: {
+        contrastRatio: contrast.contrastRatio,
+        minLuminance: contrast.minLuminance,
+        maxLuminance: contrast.maxLuminance,
+        lateralInhibitionPeak: lateralInhibition.peakRatio,
+        gestaltContinuity: gestalt.gestaltContinuity,
+        multiStabilityIndex: multiStability.multiStabilityIndex
+      },
+      diagnostics: {
+        wcagPassAA: contrast.passAA,
+        wcagPassAAA: contrast.passAAA,
+        machBandingWarning: lateralInhibition.machBandWarning,
+        gestaltSeparationWarning: gestalt.separationWarning,
+        hasDepthAmbiguity: multiStability.hasDepthAmbiguity,
+        summary: this._generateSummary(totalScore, contrast, lateralInhibition, gestalt, multiStability)
+      },
+      maps: {
+        lateralInhibition: lateralInhibition.responseMap,
+        gestaltEdges: gestalt.edgeMap
+      }
+    };
+  }
+
+  _generateSummary(score, contrast, lateral, gestalt, multi) {
+    const issues = [];
+    if (!contrast.passAA) issues.push("Low contrast ratio below WCAG AA threshold (< 4.5:1)");
+    if (lateral.machBandWarning) issues.push("Mach banding glare risk along luminance step transitions");
+    if (gestalt.separationWarning) issues.push("Weak figure-ground separation and edge orientation coherence");
+    if (multi.hasDepthAmbiguity) issues.push("Spatial multi-stability depth flip ambiguity detected");
+
+    if (issues.length === 0) {
+      return `Excellent perceptual fidelity (Score: ${score}/100). Clear figure-ground legibility and stable visual optics.`;
+    }
+    return `Perceptual audit flags ${issues.length} item(s): ${issues.join("; ")}.`;
+  }
+}
+
+// --- Interactive UI & DOM Logic ---
+document.addEventListener("DOMContentLoaded", () => {
+  const viewport = document.getElementById("viewport");
+  if (!viewport) return;
+  const ctxViewport = viewport.getContext("2d");
+
+  const inhibitionMap = document.getElementById("inhibitionMap");
+  const ctxInhibition = inhibitionMap.getContext("2d");
+
+  const edgeMapCanvas = document.getElementById("edgeMap");
+  const ctxEdge = edgeMapCanvas.getContext("2d");
+
+  // Sliders
+  const sigmaSlider = document.getElementById("sigmaSlider");
+  const gestaltSlider = document.getElementById("gestaltSlider");
+  const multiSlider = document.getElementById("multiSlider");
+
+  const sigmaVal = document.getElementById("sigmaVal");
+  const gestaltVal = document.getElementById("gestaltVal");
+  const multiVal = document.getElementById("multiVal");
+
+  const runAuditBtn = document.getElementById("runAuditBtn");
+  const scoreNum = document.getElementById("scoreNum");
+  const statusBadge = document.getElementById("statusBadge");
+  const summaryText = document.getElementById("summaryText");
+
+  // Table elements
+  const mContrast = document.getElementById("mContrast");
+  const sContrast = document.getElementById("sContrast");
+  const mInhibition = document.getElementById("mInhibition");
+  const sInhibition = document.getElementById("sInhibition");
+  const mGestalt = document.getElementById("mGestalt");
+  const sGestalt = document.getElementById("sGestalt");
+  const mMulti = document.getElementById("mMulti");
+  const sMulti = document.getElementById("sMulti");
+
+  let currentPreset = "machBands";
+
+  // Sync slider values
+  if (sigmaSlider) {
+    sigmaSlider.addEventListener("input", (e) => {
+      if (sigmaVal) sigmaVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+  if (gestaltSlider) {
+    gestaltSlider.addEventListener("input", (e) => {
+      if (gestaltVal) gestaltVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+  if (multiSlider) {
+    multiSlider.addEventListener("input", (e) => {
+      if (multiVal) multiVal.textContent = e.target.value;
+      runAudit();
+    });
+  }
+
+  // Preset switcher
+  document.querySelectorAll(".btn-preset").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      document.querySelectorAll(".btn-preset").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentPreset = btn.dataset.preset;
+      drawPresetPattern(currentPreset);
+      runAudit();
+    });
+  });
+
+  if (runAuditBtn) {
+    runAuditBtn.addEventListener("click", () => {
+      runAudit();
+    });
+  }
+
+  function drawPresetPattern(preset) {
+    const w = viewport.width;
+    const h = viewport.height;
+    ctxViewport.fillStyle = "#000000";
     ctxViewport.fillRect(0, 0, w, h);
 
-    // Card background
-    ctxViewport.fillStyle = "#1e293b";
-    ctxViewport.fillRect(20, 20, w - 40, h - 40);
+    if (preset === "machBands") {
+      // Luminance Step Ramp creating Mach bands
+      const steps = 6;
+      const stepW = w / steps;
+      for (let i = 0; i < steps; i++) {
+        const luminance = Math.floor((i / (steps - 1)) * 255);
+        ctxViewport.fillStyle = `rgb(${luminance}, ${luminance}, ${luminance})`;
+        ctxViewport.fillRect(i * stepW, 0, stepW, h);
+      }
+    } else if (preset === "highContrast") {
+      // Dark mode UI surface with text and button
+      ctxViewport.fillStyle = "#0f172a";
+      ctxViewport.fillRect(0, 0, w, h);
 
-    // High contrast header
-    ctxViewport.fillStyle = "#f8fafc";
-    ctxViewport.font = "bold 16px sans-serif";
-    ctxViewport.fillText("PERCEPTUAL EVAL", 40, 55);
+      // Card background
+      ctxViewport.fillStyle = "#1e293b";
+      ctxViewport.fillRect(20, 20, w - 40, h - 40);
 
-    // Subtitle text
-    ctxViewport.fillStyle = "#94a3b8";
-    ctxViewport.font = "12px sans-serif";
-    ctxViewport.fillText("Contrast ratio legibility audit", 40, 75);
+      // High contrast header
+      ctxViewport.fillStyle = "#f8fafc";
+      ctxViewport.font = "bold 16px sans-serif";
+      ctxViewport.fillText("PERCEPTUAL EVAL", 40, 55);
 
-    // Button
-    ctxViewport.fillStyle = "#38bdf8";
-    ctxViewport.fillRect(40, 100, 120, 36);
+      // Subtitle text
+      ctxViewport.fillStyle = "#94a3b8";
+      ctxViewport.font = "12px sans-serif";
+      ctxViewport.fillText("Contrast ratio legibility audit", 40, 75);
 
-    ctxViewport.fillStyle = "#0f172a";
-    ctxViewport.font = "bold 12px sans-serif";
-    ctxViewport.fillText("ACTION BTN", 60, 122);
-  } else if (preset === "gestaltGrid") {
-    // Continuous oriented edges vs noisy background
-    ctxViewport.fillStyle = "#111827";
-    ctxViewport.fillRect(0, 0, w, h);
+      // Button
+      ctxViewport.fillStyle = "#38bdf8";
+      ctxViewport.fillRect(40, 100, 120, 36);
 
-    ctxViewport.strokeStyle = "#10b981";
-    ctxViewport.lineWidth = 3;
+      ctxViewport.fillStyle = "#0f172a";
+      ctxViewport.font = "bold 12px sans-serif";
+      ctxViewport.fillText("ACTION BTN", 60, 122);
+    } else if (preset === "gestaltGrid") {
+      // Continuous oriented edges vs noisy background
+      ctxViewport.fillStyle = "#111827";
+      ctxViewport.fillRect(0, 0, w, h);
 
-    // Draw coherent curved stroke
-    ctxViewport.beginPath();
-    ctxViewport.arc(w / 2, h / 2, 70, 0, Math.PI * 1.5);
-    ctxViewport.stroke();
+      ctxViewport.strokeStyle = "#10b981";
+      ctxViewport.lineWidth = 3;
 
-    // Random edge noise background
-    ctxViewport.strokeStyle = "#374151";
-    ctxViewport.lineWidth = 1;
-    for (let i = 0; i < 40; i++) {
-      const rx = Math.random() * w;
-      const ry = Math.random() * h;
+      // Draw coherent curved stroke
       ctxViewport.beginPath();
-      ctxViewport.moveTo(rx, ry);
-      ctxViewport.lineTo(rx + (Math.random() - 0.5) * 20, ry + (Math.random() - 0.5) * 20);
+      ctxViewport.arc(w / 2, h / 2, 70, 0, Math.PI * 1.5);
+      ctxViewport.stroke();
+
+      // Random edge noise background
+      ctxViewport.strokeStyle = "#374151";
+      ctxViewport.lineWidth = 1;
+      for (let i = 0; i < 40; i++) {
+        const rx = Math.random() * w;
+        const ry = Math.random() * h;
+        ctxViewport.beginPath();
+        ctxViewport.moveTo(rx, ry);
+        ctxViewport.lineTo(rx + (Math.random() - 0.5) * 20, ry + (Math.random() - 0.5) * 20);
+        ctxViewport.stroke();
+      }
+    } else if (preset === "multiStable") {
+      // Necker Cube / Ambiguous 3D frame pattern
+      ctxViewport.fillStyle = "#050811";
+      ctxViewport.fillRect(0, 0, w, h);
+
+      ctxViewport.strokeStyle = "#e2e8f0";
+      ctxViewport.lineWidth = 2;
+
+      const size = 70;
+      const cx = w / 2 - 35;
+      const cy = h / 2 - 35;
+      const offset = 25;
+
+      // Front square
+      ctxViewport.strokeRect(cx, cy, size, size);
+      // Back square
+      ctxViewport.strokeRect(cx + offset, cy - offset, size, size);
+
+      // Connecting lines
+      ctxViewport.beginPath();
+      ctxViewport.moveTo(cx, cy);
+      ctxViewport.lineTo(cx + offset, cy - offset);
+
+      ctxViewport.moveTo(cx + size, cy);
+      ctxViewport.lineTo(cx + size + offset, cy - offset);
+
+      ctxViewport.moveTo(cx, cy + size);
+      ctxViewport.lineTo(cx + offset, cy + size - offset);
+
+      ctxViewport.moveTo(cx + size, cy + size);
+      ctxViewport.lineTo(cx + size + offset, cy + size - offset);
       ctxViewport.stroke();
     }
-  } else if (preset === "multiStable") {
-    // Necker Cube / Ambiguous 3D frame pattern
-    ctxViewport.fillStyle = "#050811";
-    ctxViewport.fillRect(0, 0, w, h);
-
-    ctxViewport.strokeStyle = "#e2e8f0";
-    ctxViewport.lineWidth = 2;
-
-    const size = 70;
-    const cx = w / 2 - 35;
-    const cy = h / 2 - 35;
-    const offset = 25;
-
-    // Front square
-    ctxViewport.strokeRect(cx, cy, size, size);
-    // Back square
-    ctxViewport.strokeRect(cx + offset, cy - offset, size, size);
-
-    // Connecting lines
-    ctxViewport.beginPath();
-    ctxViewport.moveTo(cx, cy);
-    ctxViewport.lineTo(cx + offset, cy - offset);
-
-    ctxViewport.moveTo(cx + size, cy);
-    ctxViewport.lineTo(cx + size + offset, cy - offset);
-
-    ctxViewport.moveTo(cx, cy + size);
-    ctxViewport.lineTo(cx + offset, cy + size - offset);
-
-    ctxViewport.moveTo(cx + size, cy + size);
-    ctxViewport.lineTo(cx + size + offset, cy + size - offset);
-    ctxViewport.stroke();
-  }
-}
-
-function renderHeatmap(canvasCtx, floatArray, width, height, colorMode = "inhibition") {
-  const imgData = canvasCtx.createImageData(width, height);
-  const data = imgData.data;
-
-  let maxVal = 0.0001;
-  for (let i = 0; i < floatArray.length; i++) {
-    const val = Math.abs(floatArray[i]);
-    if (val > maxVal) maxVal = val;
   }
 
-  for (let i = 0; i < floatArray.length; i++) {
-    const norm = Math.min(1.0, Math.abs(floatArray[i]) / maxVal);
-    const idx = i * 4;
+  function renderHeatmap(canvasCtx, floatArray, width, height, colorMode = "inhibition") {
+    const imgData = canvasCtx.createImageData(width, height);
+    const data = imgData.data;
 
-    if (colorMode === "inhibition") {
-      // Cyan to Red heatmap
-      data[idx] = Math.floor(norm * 255); // R
-      data[idx + 1] = Math.floor((1 - norm) * 220); // G
-      data[idx + 2] = Math.floor((1 - norm) * 255); // B
-    } else {
-      // Emerald edge map
-      data[idx] = 0;
-      data[idx + 1] = Math.floor(norm * 255);
-      data[idx + 2] = Math.floor(norm * 200);
+    let maxVal = 0.0001;
+    for (let i = 0; i < floatArray.length; i++) {
+      const val = Math.abs(floatArray[i]);
+      if (val > maxVal) maxVal = val;
     }
-    data[idx + 3] = 255;
+
+    for (let i = 0; i < floatArray.length; i++) {
+      const norm = Math.min(1.0, Math.abs(floatArray[i]) / maxVal);
+      const idx = i * 4;
+
+      if (colorMode === "inhibition") {
+        data[idx] = Math.floor(norm * 255); // R
+        data[idx + 1] = Math.floor((1 - norm) * 220); // G
+        data[idx + 2] = Math.floor((1 - norm) * 255); // B
+      } else {
+        data[idx] = 0;
+        data[idx + 1] = Math.floor(norm * 255);
+        data[idx + 2] = Math.floor(norm * 200);
+      }
+      data[idx + 3] = 255;
+    }
+
+    canvasCtx.putImageData(imgData, 0, 0);
   }
 
-  canvasCtx.putImageData(imgData, 0, 0);
-}
+  function runAudit() {
+    const evaluator = new PerceptualEvaluator({
+      luminanceFormula: "WCAG21",
+      lateralInhibitionSigma: parseFloat(sigmaSlider.value),
+      gestaltThreshold: parseFloat(gestaltSlider.value),
+      multiStabilitySensitivity: parseFloat(multiSlider.value)
+    });
 
-function runAudit() {
-  const evaluator = new PerceptualEvaluator({
-    luminanceFormula: "WCAG21",
-    lateralInhibitionSigma: parseFloat(sigmaSlider.value),
-    gestaltThreshold: parseFloat(gestaltSlider.value),
-    multiStabilitySensitivity: parseFloat(multiSlider.value)
-  });
+    const report = evaluator.analyze(viewport);
 
-  const report = evaluator.analyze(viewport);
+    // Update Score & Summary
+    if (scoreNum) scoreNum.textContent = report.score;
+    if (summaryText) summaryText.textContent = report.diagnostics.summary;
 
-  // Update Score & Summary
-  scoreNum.textContent = report.score;
-  summaryText.textContent = report.diagnostics.summary;
+    if (statusBadge) {
+      if (report.score >= 80) {
+        statusBadge.textContent = "Pass (High Quality)";
+        statusBadge.style.background = "var(--accent-green)";
+      } else if (report.score >= 50) {
+        statusBadge.textContent = "Warning (Sub-optimal)";
+        statusBadge.style.background = "var(--accent-yellow)";
+      } else {
+        statusBadge.textContent = "Fail (Perceptual Flaws)";
+        statusBadge.style.background = "var(--accent-red)";
+      }
+    }
 
-  if (report.score >= 80) {
-    statusBadge.textContent = "Pass (High Quality)";
-    statusBadge.style.background = "var(--accent-green)";
-  } else if (report.score >= 50) {
-    statusBadge.textContent = "Warning (Sub-optimal)";
-    statusBadge.style.background = "var(--accent-yellow)";
-  } else {
-    statusBadge.textContent = "Fail (Perceptual Flaws)";
-    statusBadge.style.background = "var(--accent-red)";
+    // Update Table
+    if (mContrast) mContrast.textContent = `${report.metrics.contrastRatio}:1`;
+    if (sContrast) {
+      sContrast.innerHTML = report.diagnostics.wcagPassAA 
+        ? `<span class="pass-text">PASS (AA)</span>` 
+        : `<span class="fail-text">FAIL</span>`;
+    }
+
+    if (mInhibition) mInhibition.textContent = report.metrics.lateralInhibitionPeak;
+    if (sInhibition) {
+      sInhibition.innerHTML = report.diagnostics.machBandingWarning 
+        ? `<span class="warn-text">GLARE RISK</span>` 
+        : `<span class="pass-text">STABLE</span>`;
+    }
+
+    if (mGestalt) mGestalt.textContent = report.metrics.gestaltContinuity;
+    if (sGestalt) {
+      sGestalt.innerHTML = report.diagnostics.gestaltSeparationWarning 
+        ? `<span class="warn-text">LOW SEPARATION</span>` 
+        : `<span class="pass-text">OPTIMAL</span>`;
+    }
+
+    if (mMulti) mMulti.textContent = report.metrics.multiStabilityIndex;
+    if (sMulti) {
+      sMulti.innerHTML = report.diagnostics.hasDepthAmbiguity 
+        ? `<span class="warn-text">3D AMBIGUITY</span>` 
+        : `<span class="pass-text">CLEAR</span>`;
+    }
+
+    // Render Heatmaps
+    renderHeatmap(ctxInhibition, report.maps.lateralInhibition, viewport.width, viewport.height, "inhibition");
+    renderHeatmap(ctxEdge, report.maps.gestaltEdges, viewport.width, viewport.height, "gestalt");
   }
 
-  // Update Table
-  mContrast.textContent = `${report.metrics.contrastRatio}:1`;
-  sContrast.innerHTML = report.diagnostics.wcagPassAA 
-    ? `<span class="pass-text">PASS (AA)</span>` 
-    : `<span class="fail-text">FAIL</span>`;
-
-  mInhibition.textContent = report.metrics.lateralInhibitionPeak;
-  sInhibition.innerHTML = report.diagnostics.machBandingWarning 
-    ? `<span class="warn-text">GLARE RISK</span>` 
-    : `<span class="pass-text">STABLE</span>`;
-
-  mGestalt.textContent = report.metrics.gestaltContinuity;
-  sGestalt.innerHTML = report.diagnostics.gestaltSeparationWarning 
-    ? `<span class="warn-text">LOW SEPARATION</span>` 
-    : `<span class="pass-text">OPTIMAL</span>`;
-
-  mMulti.textContent = report.metrics.multiStabilityIndex;
-  sMulti.innerHTML = report.diagnostics.hasDepthAmbiguity 
-    ? `<span class="warn-text">3D AMBIGUITY</span>` 
-    : `<span class="pass-text">CLEAR</span>`;
-
-  // Render Heatmaps
-  renderHeatmap(ctxInhibition, report.maps.lateralInhibition, viewport.width, viewport.height, "inhibition");
-  renderHeatmap(ctxEdge, report.maps.gestaltEdges, viewport.width, viewport.height, "gestalt");
-}
-
-// Initial Draw & Audit
-drawPresetPattern(currentPreset);
-runAudit();
+  // Initial Draw & Audit
+  drawPresetPattern(currentPreset);
+  runAudit();
+});

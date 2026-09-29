@@ -18,11 +18,17 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  let reqPath = req.url === "/" ? "/demo/index.html" : req.url;
+  let reqUrl = req.url.split("?")[0];
+  let reqPath = reqUrl === "/" ? "/demo/index.html" : reqUrl;
   
   // Prevent directory traversal
-  const safePath = path.normalize(reqPath).replace(/^(\.\.[\/\\])+/, '');
-  const filePath = path.join(projectRoot, safePath);
+  const safePath = path.normalize(reqPath).replace(/^(\.\.[\/\\])+/, "");
+  let filePath = path.join(projectRoot, safePath);
+
+  // If file doesn't exist at projectRoot/safePath, fallback to demo/ directory
+  if (!fs.existsSync(filePath) && fs.existsSync(path.join(__dirname, safePath))) {
+    filePath = path.join(__dirname, safePath);
+  }
 
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
@@ -47,3 +53,4 @@ const PORT = 3000;
 server.listen(PORT, () => {
   console.log(`Perceptual Vision Eval Demo running at http://localhost:${PORT}`);
 });
+
